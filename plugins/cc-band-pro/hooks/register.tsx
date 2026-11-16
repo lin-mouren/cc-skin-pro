@@ -151,7 +151,7 @@ const stepsFor = async ($: EngineInterface, e: Record<string, unknown>): Promise
 export const register: Register = on => {
   // A /clear or a resume ends this session: the host empties every plugin's $.state with it (the atoms included,
   // back to their defaults), so only the turn's edits, held in this module, are dropped here.
-  on('session.end', async ($, e, next) => {
+  on('session.end', async (_, e, next) => {
     if (e.reason === 'resume' || e.reason === 'clear') {
       pendingDiffs = []
     }
@@ -159,7 +159,7 @@ export const register: Register = on => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  on('turn.start', async ($, e, next) => {
+  on('turn.start', async (_, e, next) => {
     if (e.agentId === undefined) {
       pendingDiffs = []
     }
