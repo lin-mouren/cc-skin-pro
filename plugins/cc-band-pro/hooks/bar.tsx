@@ -90,36 +90,72 @@ const clip = (text: string, width: number): string => {
   return `${out}…`
 }
 
-/**
- * A mod's segment as one line, cut to `width`, or '' when it carries no letter
- * or digit: a glyph alone (a status dot, an idle mark) is no label, and drawn
- * as a pill of its own it reads as a stray.
- */
-const segmentText = (text: string, width: number): string => {
-  const line = oneLine(text)
+/** A segment with a letter or digit is a label; a glyph alone (a status dot, an idle mark) is not, and as a pill of its own reads as a stray. */
+const HAS_WORD = /[\p{L}\p{N}]/u
 
-  return /[\p{L}\p{N}]/u.test(line) ? clip(line, width) : ''
-}
+/** Cells a pill never gives up: a segment is cut no shorter than this when the band is narrow. */
+const MIN_SEGMENT_CELLS = 6
+/** Cells the band spends around a pill: a space either side of the text and one for the edge, plus one for the opening cap. */
+const PILL_FRAME_CELLS = 3
+const OPEN_CAP_CELLS = 1
 
 /**
  * The band's modules, left to right: the diff with its edit count, the tree and
  * the marks, then the mods' modules. The task and studio modules are left out
  * while their segment is empty; git, inventory and plan show their own label
  * instead, so the module stays visible while its mod publishes no text.
+ *
+ * With `columns` (the band's `bodyColumns`) the segments are cut to fit the row:
+ * the widest gives up a cell at a time until every module is whole in it, none
+ * shorter than MIN_SEGMENT_CELLS. Without it each keeps its own cap.
  */
-export const barPills = (diffCount: number, segments: Segments): Pill[] => {
-  const blocks: Omit<Pill, 'paint'>[] = [
+export const barPills = (diffCount: number, segments: Segments, columns?: number): Pill[] => {
+  const fixed: Omit<Pill, 'paint'>[] = [
     { key: 'diff', text: `${ICONS.diff} diff${diffCount > 0 ? ` ${diffCount}` : ''}`, press: 'diff' },
     { key: 'tree', text: `${ICONS.tree} tree`, press: 'tree' },
     { key: 'mark', text: `${ICONS.bookmark} marks`, press: 'mark' },
-    { key: 'rail', text: segmentText(segments.rail, RAIL_CELLS), press: 'rail' },
-    { key: 'studio', text: segmentText(segments.studio, STUDIO_CELLS), press: 'studio' },
-    { key: 'git', text: segmentText(segments.git, MODULE_CELLS) || 'git', press: 'git' },
-    { key: 'inv', text: segmentText(segments.inv, MODULE_CELLS) || 'inv', press: 'inv' },
-    { key: 'plan', text: segmentText(segments.plan, MODULE_CELLS) || 'plan', press: 'plan' },
+  ]
+  const modules: { key: string; press: BarPress; line: string; cap: number; label: string }[] = [
+    { key: 'rail', press: 'rail', line: oneLine(segments.rail), cap: RAIL_CELLS, label: '' },
+    { key: 'studio', press: 'studio', line: oneLine(segments.studio), cap: STUDIO_CELLS, label: '' },
+    { key: 'git', press: 'git', line: oneLine(segments.git), cap: MODULE_CELLS, label: 'git' },
+    { key: 'inv', press: 'inv', line: oneLine(segments.inv), cap: MODULE_CELLS, label: 'inv' },
+    { key: 'plan', press: 'plan', line: oneLine(segments.plan), cap: MODULE_CELLS, label: 'plan' },
+  ]
+  const shown = modules
+    .map(module => ({ ...module, width: Math.min(module.cap, cells(module.line)) }))
+    .filter(module => (HAS_WORD.test(module.line) ? true : module.label !== ''))
+  if (columns !== undefined) {
+    const room =
+      columns - OPEN_CAP_CELLS - (fixed.length + shown.length) * PILL_FRAME_CELLS - fixed.reduce((sum, block) => sum + cells(block.text), 0)
+    const own = (module: (typeof shown)[number]): number => (HAS_WORD.test(module.line) ? module.width : cells(module.label))
+    const floor = (module: (typeof shown)[number]): number => Math.min(own(module), MIN_SEGMENT_CELLS)
+    let total = shown.reduce((sum, module) => sum + own(module), 0)
+    const widths = new Map(shown.map(module => [module.key, own(module)]))
+    while (total > room) {
+      const widest = shown
+        .filter(module => HAS_WORD.test(module.line) && (widths.get(module.key) ?? 0) > floor(module))
+        .sort((x, y) => (widths.get(y.key) ?? 0) - (widths.get(x.key) ?? 0))[0]
+      if (widest === undefined) {
+        break
+      }
+      widths.set(widest.key, (widths.get(widest.key) ?? 0) - 1)
+      total -= 1
+    }
+    shown.forEach(module => {
+      module.width = widths.get(module.key) ?? module.width
+    })
+  }
+  const blocks: Omit<Pill, 'paint'>[] = [
+    ...fixed,
+    ...shown.map(module => ({
+      key: module.key,
+      press: module.press,
+      text: HAS_WORD.test(module.line) ? clip(module.line, module.width) : module.label,
+    })),
   ]
 
-  return blocks.filter(block => block.text !== '').map((block, index) => ({ ...block, paint: BLOCKS[index]! }))
+  return blocks.map((block, index) => ({ ...block, paint: BLOCKS[index]! }))
 }
 
 /**
@@ -172,8 +208,11 @@ export const drawPowerline = ({ Box, Text, Button }: Elements, pills: readonly P
             </Text>
           )
 
+        // A pill that cannot shrink: squeezed in a full row, its text wraps and only the first glyph (a stray ○) shows.
         return [
-          face,
+          <Box key={`${pill.key}-face`} flexShrink={0}>
+            {face}
+          </Box>,
           <Text key={`${pill.key}-edge`} color={pill.paint.bg} backgroundColor={following?.paint.bg}>
             {following === undefined ? POWERLINE.close : POWERLINE.arrow}
           </Text>,

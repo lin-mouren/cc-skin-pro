@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { barPills, cells } from './bar'
+import { barPills, cells, drawPowerline } from './bar'
 import type { Pill } from './bar'
 
 const NONE = { rail: '', studio: '', git: '', inv: '', plan: '' }
@@ -74,4 +74,57 @@ test('a glyph with words in the same segment is kept as text', async () => {
   const pills = barPills(0, { ...NONE, rail: '○ 2 open' })
 
   expect(textOf(pills, 'rail')).toBe('○ 2 open')
+})
+
+// Real producer shapes: task-rail's segment and a bare glyph.
+const RAIL_REAL = '○ ▓▓░ 1/1 · 执行命令 · ✓7 ✗0'
+
+test('real rail shape stays one whole pill; a bare glyph leaves none (no stray ○ pill)', async () => {
+  const whole = barPills(0, { ...NONE, rail: RAIL_REAL })
+  expect(textOf(whole, 'rail')).toBe(RAIL_REAL)
+  const bare = barPills(0, { ...NONE, rail: '○' })
+  expect(keys(bare)).not.toContain('rail')
+  expect(bare.some(pill => pill.text.trim() === '○')).toBe(false)
+})
+
+/** What the band draws for a row of pills: open cap, then each pill with one cell of padding either side and one of edge. */
+const bandCells = (pills: readonly Pill[]): number =>
+  pills.length === 0 ? 0 : 1 + pills.reduce((sum, pill) => sum + cells(pill.text) + 3, 0)
+
+const FULL = {
+  rail: RAIL_REAL,
+  studio: 'studio · 3 drafts · 2 launched · 1 review pending',
+  git: '⎇ govops/2026-09-18-ci-coverage · 3 reflog',
+  inv: 'mem 40 · skill 120 · mod 17 · hooks 9',
+  plan: 'P0 open 15 · overdue 2 · next due 18:30',
+}
+
+test('all 8 modules fit in 122 columns once the band knows its width', async () => {
+  const pills = barPills(12, FULL, 122)
+  expect(keys(pills)).toEqual(['diff', 'tree', 'mark', 'rail', 'studio', 'git', 'inv', 'plan'])
+  expect(bandCells(pills)).toBeLessThanOrEqual(122)
+  for (const width of [100, 110, 122, 140, 200]) {
+    expect(bandCells(barPills(12, FULL, width))).toBeLessThanOrEqual(width)
+  }
+})
+
+test('narrow bands keep every module with at least its label', async () => {
+  const pills = barPills(0, FULL, 100)
+  expect(pills.length).toBe(8)
+  expect(bandCells(pills)).toBeLessThanOrEqual(100)
+})
+
+test('wide bands keep the natural caps', async () => {
+  const pills = barPills(0, FULL, 400)
+  expect(cells(textOf(pills, 'studio') ?? '')).toBeLessThanOrEqual(36)
+  expect(textOf(pills, 'rail')).toBe(RAIL_REAL)
+})
+
+test('every pill sits in a box that does not shrink: a squeezed pill would wrap to its first glyph, a stray ○', async () => {
+  const stub = (name: string) => ((props: Record<string, unknown>) => ({ name, ...props })) as never
+  const row = drawPowerline({ Box: stub('Box'), Text: stub('Text'), Button: stub('Button') }, barPills(0, FULL, 122), () => undefined) as unknown as {
+    children: unknown
+  }
+  const nodes = [row.children].flat(3) as { name?: string; flexShrink?: number }[]
+  expect(nodes.filter(node => node?.name === 'Box' && node.flexShrink === 0).length).toBe(8)
 })

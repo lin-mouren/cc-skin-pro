@@ -15,17 +15,16 @@ const diffIndexAtom = atom({ plugin: 'cc-band-pro', key: 'diffIndex' } as const,
 let pendingDiffs: DiffStep[] = []
 
 /**
- * Runs another plugin's command on a timer, in a dispatch of its own: work a
- * press starts ends with the press, and a command waits its turn while Claude
+ * Runs another plugin's command inside the press, so the pane it opens counts as
+ * the person's own (placed at any width, not held back below 144 columns). A timer
+ * would drop the press behind the call. A command waits its turn while Claude
  * works unless its plugin made it immediate. A plugin that is off says so.
  */
 const runCommand = ($: EngineInterface, target: Target) => {
-  $.clock.after(1, () =>
-    $.command.run({ command: target.command, args: target.args }).catch((error: unknown) => {
-      const why = error instanceof Error ? error.message : String(error)
-      $.ui.toast(`/${target.command} did not run (is ${target.plugin} on?): ${why}`)
-    }),
-  )
+  $.command.run({ command: target.command, args: target.args }).catch((error: unknown) => {
+    const why = error instanceof Error ? error.message : String(error)
+    $.ui.toast(`/${target.command} did not run (is ${target.plugin} on?): ${why}`)
+  })
 }
 
 /** Opens the diff pane on the last turn's edits, at the first step; a surface that cannot seat it says so in a toast. */
@@ -43,7 +42,7 @@ const openDiff = async ($: EngineInterface, pane: Pane): Promise<void> => {
  * turn to end, as one run from a hook does, so a press while Claude works says
  * it is queued, unless the command is immediate and runs mid-turn.
  */
-const onBarPress = ($: EngineInterface, press: BarPress, isWorking: boolean) => {
+export const onBarPress = ($: EngineInterface, press: BarPress, isWorking: boolean) => {
   const pane = paneOf(press)
   if (pane !== undefined) {
     void openDiff($, pane).catch(() => undefined)
@@ -196,7 +195,7 @@ export const register: Register = on => {
       git: await segmentOf(() => read($, { plugin: 'git-board', key: 'segment' })),
       inv: await segmentOf(() => read($, { plugin: 'inventory-pane', key: 'segment' })),
       plan: await segmentOf(() => read($, { plugin: 'plan-board', key: 'segment' })),
-    })
+    }, e.props.bodyColumns)
 
     return (
       <Box flexDirection="column">

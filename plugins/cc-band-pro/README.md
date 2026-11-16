@@ -68,9 +68,19 @@ opens its own pane. cc-band-pro draws only the Diff pane. Task runs `/rail pane`
 because a bare `/rail` toggles the folding of tool calls. Tree runs `/filetree open`,
 because a bare `/filetree` closes the tree when it is already shown.
 
-While Claude is working, a press whose command waits for the turn is queued until
-the turn ends, and a toast says so. Tree and Marks are the exception: their
-commands are immediate, so they run at once mid-turn.
+The command is called inside the press itself, not through a timer: the host
+places a pane at any width only when the person's command or press is behind the
+open, and below 144 columns a pane opened on its own waits undrawn. While Claude
+is working, a press whose command waits for the turn is queued until the turn
+ends, and a toast says so. Tree and Marks are the exception: their commands are
+immediate, so they run at once mid-turn.
+
+## Width
+
+The band reads its own width () and cuts the task, studio, git,
+inventory and plan segments to fit, widest first, none under 6 cells, so all
+eight modules show at 122 columns. Each pill is a box that does not shrink, so a
+squeezed row never wraps a pill down to a lone glyph.
 
 ## Files
 
