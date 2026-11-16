@@ -15,7 +15,7 @@ const diffIndexAtom = atom({ plugin: 'cc-band-pro', key: 'diffIndex' } as const,
  * the one that opens this plugin's own pane.
  */
 type Pane = { id: string; title: string | ((cwd: string) => string); focus?: boolean; closeOnEscape?: boolean }
-type Target = { command: string; plugin: string; pane?: Pane }
+type Target = { command: string; args?: string; plugin: string; pane?: Pane }
 const TARGETS: Readonly<Record<Exclude<BarPress, 'diff'>, Target>> = {
   // Each of these keeps the state its pane draws from, so opening it by its id
   // comes up whole without the command: filetree keeps its tree following the
@@ -30,6 +30,34 @@ const TARGETS: Readonly<Record<Exclude<BarPress, 'diff'>, Target>> = {
     plugin: 'transcript-bookmarks',
     pane: { id: 'bookmarks', title: 'Bookmarks', focus: true, closeOnEscape: true },
   },
+  // The mods' modules. Each pane is opened by its id and has its own render hook. Their commands are the fallback;
+  // bare /rail toggles the folding of tool calls, so the rail's fallback says 'pane' to open its side panel.
+  rail: {
+    command: 'rail',
+    args: 'pane',
+    plugin: 'task-rail',
+    pane: { id: 'task-rail', title: 'Rail', closeOnEscape: true },
+  },
+  studio: {
+    command: 'studio',
+    plugin: 'product-studio',
+    pane: { id: 'product-studio', title: 'Studio', focus: true, closeOnEscape: true },
+  },
+  git: {
+    command: 'gb',
+    plugin: 'git-board',
+    pane: { id: 'git-board', title: 'Git', focus: true, closeOnEscape: true },
+  },
+  inv: {
+    command: 'inv',
+    plugin: 'inventory-pane',
+    pane: { id: 'inventory-pane', title: 'Inventory', focus: true, closeOnEscape: true },
+  },
+  plan: {
+    command: 'pb',
+    plugin: 'plan-board',
+    pane: { id: 'plan-board', title: 'Plan', focus: true, closeOnEscape: true },
+  },
 }
 
 /** The edits this turn has made so far; they become the diff pane's steps when it ends. */
@@ -42,7 +70,7 @@ let pendingDiffs: DiffStep[] = []
  */
 const runCommand = ($: EngineInterface, target: Target) => {
   $.clock.after(1, () =>
-    $.command.run({ command: target.command }).catch((error: unknown) => {
+    $.command.run({ command: target.command, args: target.args }).catch((error: unknown) => {
       const why = error instanceof Error ? error.message : String(error)
       $.ui.toast(`/${target.command} did not run (is ${target.plugin} on?): ${why}`)
     }),
@@ -148,6 +176,21 @@ const stepsFor = async ($: EngineInterface, e: Record<string, unknown>): Promise
   return []
 }
 
+/**
+ * A mod's segment as text, or '' when the read fails (the mod is absent) or the
+ * value is not a string: the band then leaves that module out. The read is
+ * passed in as a thunk, so each call site keeps its plugin and key as literals.
+ */
+const segmentOf = async (load: () => Promise<unknown>): Promise<string> => {
+  try {
+    const text = await load()
+
+    return typeof text === 'string' ? text : ''
+  } catch {
+    return ''
+  }
+}
+
 export const register: Register = on => {
   // A /clear or a resume ends this session: the host empties every plugin's $.state with it (the atoms included,
   // back to their defaults), so only the turn's edits, held in this module, are dropped here.
@@ -209,7 +252,12 @@ export const register: Register = on => {
     }
     const elements = $.ui.resolve(e)
     const { Box } = elements
-    const pills = barPills((await read($, diffStepsAtom)).length)
+    // The mods' segments: task-rail's status and product-studio's summary, read while the band draws so it follows them.
+    const pills = barPills(
+      (await read($, diffStepsAtom)).length,
+      await segmentOf(() => read($, { plugin: 'task-rail', key: 'segment' })),
+      await segmentOf(() => read($, { plugin: 'product-studio', key: 'segment' })),
+    )
 
     return (
       <Box flexDirection="column">

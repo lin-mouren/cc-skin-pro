@@ -12,5 +12,9 @@ declare module 'claude-code' {
       /** The step the diff pane shows. */
       diffIndex: number
     }
+    // Read-only, owned by task-rail and product-studio: the one-line text each publishes for its band module.
+    // A mod that is absent, or that has published none, reads as nothing and its module is left out.
+    'task-rail': { segment: string }
+    'product-studio': { segment: string }
   }
 }

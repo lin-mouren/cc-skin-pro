@@ -5,12 +5,19 @@ export type Paint = { bg: string; fg: string }
 
 /**
  * Catppuccin Mocha, as cc-skin-pro's skin of that name paints its bar: a
- * gradient, left to right, one step per block. Locked: no themes to pick.
+ * gradient, left to right, one step per block. The first three are that
+ * gradient; the mods' modules after them take the next accents, in order.
+ * Locked: no themes to pick.
  */
 const BLOCKS: readonly Paint[] = [
   { bg: '#b4befe', fg: '#11111b' }, // lavender: diff
   { bg: '#89b4fa', fg: '#11111b' }, // blue: tree
   { bg: '#585b70', fg: '#cdd6f4' }, // surface2: marks
+  { bg: '#74c7ec', fg: '#11111b' }, // sapphire: task
+  { bg: '#94e2d5', fg: '#11111b' }, // teal: studio
+  { bg: '#a6e3a1', fg: '#11111b' }, // green: git
+  { bg: '#f9e2af', fg: '#11111b' }, // yellow: inventory
+  { bg: '#cba6f7', fg: '#11111b' }, // mauve: plan
 ]
 
 /** Powerline separators (Nerd Fonts): a round cap to open, an arrow between blocks, a round cap to close. */
@@ -22,8 +29,8 @@ const ICONS = { diff: '', tree: '', bookmark: '' } as const
 /** The icons as the words a button's label uses, where a surface draws labels (Desktop, VS Code). */
 const ICON_WORDS: Readonly<Record<string, string>> = { [ICONS.diff]: '±' }
 
-/** What a press on a block runs; the diff block opens the Diff pane, the others their plugins' panes. */
-export type BarPress = 'diff' | 'tree' | 'mark'
+/** What a press on a block runs; the diff block opens the Diff pane, the others their mods' panes. */
+export type BarPress = 'diff' | 'tree' | 'mark' | 'rail' | 'studio' | 'git' | 'inv' | 'plan'
 
 export type Pill = {
   key: string
@@ -52,15 +59,50 @@ const charCells = (char: string): number => {
 /** Terminal cells, not code points: a wide character takes two, a combining mark none. */
 export const cells = (text: string): number => [...text].reduce((sum, char) => sum + charCells(char), 0)
 
-/** The three blocks: the diff with its edit count, the tree and the marks. */
-export const barPills = (diffCount: number): Pill[] => {
+/** Cells a mod's segment may take on the band: the task's status, the studio's summary. */
+const RAIL_CELLS = 28
+const STUDIO_CELLS = 36
+
+/** A segment's text as one line: whitespace collapsed, the ends trimmed. */
+const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim()
+
+/** The text cut to at most `width` cells; a cut ends in an ellipsis, which takes the last cell. */
+const clip = (text: string, width: number): string => {
+  if (cells(text) <= width) {
+    return text
+  }
+  let out = ''
+  let used = 0
+  for (const char of text) {
+    const size = cells(char)
+    if (used + size > width - 1) {
+      break
+    }
+    out += char
+    used += size
+  }
+
+  return `${out}…`
+}
+
+/**
+ * The band's modules, left to right: the diff with its edit count, the tree and
+ * the marks, then the mods' modules. A module whose text is empty is left out:
+ * its mod's segment is '' when the mod is absent or has published none.
+ */
+export const barPills = (diffCount: number, rail: string, studio: string): Pill[] => {
   const blocks: Omit<Pill, 'paint'>[] = [
     { key: 'diff', text: `${ICONS.diff} diff${diffCount > 0 ? ` ${diffCount}` : ''}`, press: 'diff' },
     { key: 'tree', text: `${ICONS.tree} tree`, press: 'tree' },
     { key: 'mark', text: `${ICONS.bookmark} marks`, press: 'mark' },
+    { key: 'rail', text: clip(oneLine(rail), RAIL_CELLS), press: 'rail' },
+    { key: 'studio', text: clip(oneLine(studio), STUDIO_CELLS), press: 'studio' },
+    { key: 'git', text: 'git', press: 'git' },
+    { key: 'inv', text: 'inv', press: 'inv' },
+    { key: 'plan', text: 'plan', press: 'plan' },
   ]
 
-  return blocks.map((block, index) => ({ ...block, paint: BLOCKS[index]! }))
+  return blocks.filter(block => block.text !== '').map((block, index) => ({ ...block, paint: BLOCKS[index]! }))
 }
 
 /**

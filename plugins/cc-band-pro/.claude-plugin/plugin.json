@@ -1,7 +1,7 @@
 {
   "name": "cc-band-pro",
-  "version": "0.2.0",
-  "description": "cc-skin-pro's powerline bar alone, locked to Catppuccin Mocha: diff, tree and marks, each block opening its own pane at once, mid-turn, with no line left in the conversation.",
+  "version": "0.3.0",
+  "description": "The one band above the prompt, locked to Catppuccin Mocha: it holds the mods' modules as powerline blocks (diff, tree, marks, then task, studio, git, inventory and plan), each opening its pane at once, mid-turn.",
   "dependencies": [
     "filetree@cc-skin-pro",
     "transcript-bookmarks@cc-skin-pro"
