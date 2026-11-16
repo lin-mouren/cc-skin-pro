@@ -62,6 +62,11 @@ export const cells = (text: string): number => [...text].reduce((sum, char) => s
 /** Cells a mod's segment may take on the band: the task's status, the studio's summary. */
 const RAIL_CELLS = 28
 const STUDIO_CELLS = 36
+/** Cells the git, inventory and plan segments may take. */
+const MODULE_CELLS = 28
+
+/** The mods' segment texts as the band reads them: '' where a mod is absent or publishes none. */
+export type Segments = { rail: string; studio: string; git: string; inv: string; plan: string }
 
 /** A segment's text as one line: whitespace collapsed, the ends trimmed. */
 const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim()
@@ -86,20 +91,32 @@ const clip = (text: string, width: number): string => {
 }
 
 /**
- * The band's modules, left to right: the diff with its edit count, the tree and
- * the marks, then the mods' modules. A module whose text is empty is left out:
- * its mod's segment is '' when the mod is absent or has published none.
+ * A mod's segment as one line, cut to `width`, or '' when it carries no letter
+ * or digit: a glyph alone (a status dot, an idle mark) is no label, and drawn
+ * as a pill of its own it reads as a stray.
  */
-export const barPills = (diffCount: number, rail: string, studio: string): Pill[] => {
+const segmentText = (text: string, width: number): string => {
+  const line = oneLine(text)
+
+  return /[\p{L}\p{N}]/u.test(line) ? clip(line, width) : ''
+}
+
+/**
+ * The band's modules, left to right: the diff with its edit count, the tree and
+ * the marks, then the mods' modules. The task and studio modules are left out
+ * while their segment is empty; git, inventory and plan show their own label
+ * instead, so the module stays visible while its mod publishes no text.
+ */
+export const barPills = (diffCount: number, segments: Segments): Pill[] => {
   const blocks: Omit<Pill, 'paint'>[] = [
     { key: 'diff', text: `${ICONS.diff} diff${diffCount > 0 ? ` ${diffCount}` : ''}`, press: 'diff' },
     { key: 'tree', text: `${ICONS.tree} tree`, press: 'tree' },
     { key: 'mark', text: `${ICONS.bookmark} marks`, press: 'mark' },
-    { key: 'rail', text: clip(oneLine(rail), RAIL_CELLS), press: 'rail' },
-    { key: 'studio', text: clip(oneLine(studio), STUDIO_CELLS), press: 'studio' },
-    { key: 'git', text: 'git', press: 'git' },
-    { key: 'inv', text: 'inv', press: 'inv' },
-    { key: 'plan', text: 'plan', press: 'plan' },
+    { key: 'rail', text: segmentText(segments.rail, RAIL_CELLS), press: 'rail' },
+    { key: 'studio', text: segmentText(segments.studio, STUDIO_CELLS), press: 'studio' },
+    { key: 'git', text: segmentText(segments.git, MODULE_CELLS) || 'git', press: 'git' },
+    { key: 'inv', text: segmentText(segments.inv, MODULE_CELLS) || 'inv', press: 'inv' },
+    { key: 'plan', text: segmentText(segments.plan, MODULE_CELLS) || 'plan', press: 'plan' },
   ]
 
   return blocks.filter(block => block.text !== '').map((block, index) => ({ ...block, paint: BLOCKS[index]! }))

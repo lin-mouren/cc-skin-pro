@@ -252,12 +252,15 @@ export const register: Register = on => {
     }
     const elements = $.ui.resolve(e)
     const { Box } = elements
-    // The mods' segments: task-rail's status and product-studio's summary, read while the band draws so it follows them.
-    const pills = barPills(
-      (await read($, diffStepsAtom)).length,
-      await segmentOf(() => read($, { plugin: 'task-rail', key: 'segment' })),
-      await segmentOf(() => read($, { plugin: 'product-studio', key: 'segment' })),
-    )
+    // The mods' segments, read while the band draws so it follows them: task-rail's status, product-studio's summary,
+    // git-board's branch line, inventory-pane's counts and plan-board's open items.
+    const pills = barPills((await read($, diffStepsAtom)).length, {
+      rail: await segmentOf(() => read($, { plugin: 'task-rail', key: 'segment' })),
+      studio: await segmentOf(() => read($, { plugin: 'product-studio', key: 'segment' })),
+      git: await segmentOf(() => read($, { plugin: 'git-board', key: 'segment' })),
+      inv: await segmentOf(() => read($, { plugin: 'inventory-pane', key: 'segment' })),
+      plan: await segmentOf(() => read($, { plugin: 'plan-board', key: 'segment' })),
+    })
 
     return (
       <Box flexDirection="column">

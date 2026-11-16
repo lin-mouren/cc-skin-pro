@@ -15,9 +15,13 @@ modules as blocks, left to right, each a click away from the pane it opens.
 | Marks | A bookmark icon | Opens the Bookmarks pane (the `transcript-bookmarks` plugin) |
 | Task | task-rail's segment: its one-line status, cut to 28 cells | Opens the Rail pane (task-rail); runs `/rail pane` |
 | Studio | product-studio's segment: its one-line summary, cut to 36 cells | Opens the Studio pane (product-studio); runs `/studio` |
-| Git | `git` | Opens the Git pane (git-board); runs `/gb` |
-| Inventory | `inv` | Opens the Inventory pane (inventory-pane); runs `/inv` |
-| Plan | `plan` | Opens the Plan pane (plan-board); runs `/pb` |
+| Git | git-board's segment, e.g. `⎇ main · 3 reflog`, cut to 28 cells; `git` while it publishes none | Opens the Git pane (git-board); runs `/gb` |
+| Inventory | inventory-pane's segment, e.g. `mem 4 · skill 12 · mod 7`, cut to 28 cells; `inv` while it publishes none | Opens the Inventory pane (inventory-pane); runs `/inv` |
+| Plan | plan-board's segment, e.g. `P0 open 5 · overdue 0`, cut to 28 cells; `plan` while it publishes none | Opens the Plan pane (plan-board); runs `/pb` |
+
+A Task or Studio segment with no letter or digit (a lone glyph such as `○`) is
+left out, as an empty one is: a block of its own with no words would read as a
+stray. Git, Inventory and Plan show their label instead.
 
 The model, its effort and the context usage are not drawn here: a status line
 shows them.

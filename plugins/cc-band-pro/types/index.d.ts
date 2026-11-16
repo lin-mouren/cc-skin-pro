@@ -12,9 +12,13 @@ declare module 'claude-code' {
       /** The step the diff pane shows. */
       diffIndex: number
     }
-    // Read-only, owned by task-rail and product-studio: the one-line text each publishes for its band module.
-    // A mod that is absent, or that has published none, reads as nothing and its module is left out.
+    // Read-only, owned by each mod: the one-line text it publishes for its band module.
+    // A mod that is absent, or that has published none, reads as nothing: task-rail and product-studio leave their
+    // module out; git-board, inventory-pane and plan-board show their label (git, inv, plan) instead.
     'task-rail': { segment: string }
     'product-studio': { segment: string }
+    'git-board': { segment: string }
+    'inventory-pane': { segment: string }
+    'plan-board': { segment: string }
   }
 }
