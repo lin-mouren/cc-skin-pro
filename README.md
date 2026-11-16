@@ -45,12 +45,11 @@ Upstream: [hellosverre/claude-skins](https://github.com/hellosverre/claude-skins
 ![cc-band-pro](docs/cc-band-pro-idle.png)
 ![cc-band-pro while Claude works](docs/cc-band-pro-runing.png)
 
-The powerline band above the prompt, locked to Catppuccin Mocha. Six blocks — thinking
-(the crab's picture where the terminal draws images, the Claude glyph elsewhere), model,
-diff count, tree, bookmarks and context usage. Each block opens its plugin's pane at
-once, mid-turn, without leaving a line in the conversation. The band is thin by design:
-the panes belong to find-model, filetree, session-meter, after and transcript-bookmarks,
-which it declares as dependencies.
+The powerline band above the prompt, locked to Catppuccin Mocha. Three blocks — diff
+count, tree and bookmarks. Each block opens its plugin's pane at once, mid-turn, without
+leaving a line in the conversation. The band is thin by design: the panes belong to
+filetree and transcript-bookmarks, which it declares as dependencies. The model, effort
+and context usage are not drawn on the band; a status line shows them.
 
 By [Linxuan](https://github.com/linxuan-sys). Original to this marketplace.
 
@@ -205,7 +204,7 @@ claude plugin install mod-store@cc-skin-pro
 
 Run `/reload-plugins` afterwards, or restart Claude Code. `skins` is installed first
 because transcript-bookmarks and paste-preview depend on it; `cc-band-pro` declares its
-five companion plugins as dependencies, and Claude Code installs those with it.
+two companion plugins as dependencies, and Claude Code installs those with it.
 
 Claude Code 2.1.306 or newer is recommended — filetree needs it, smart-compact needs
 2.1.295, redgreen 2.1.293, and skins 2.1.287.
@@ -251,7 +250,7 @@ Each plugin keeps the license its upstream gave it: MIT, except transcript-bookm
 ![cc-band-pro](docs/cc-band-pro-idle.png)
 ![cc-band-pro 运行中](docs/cc-band-pro-runing.png)
 
-输入框上方的 powerline 横幅，锁定 Catppuccin Mocha。六个块——思考（终端支持图片时是螃蟹，否则是 Claude 图标）、模型、diff 数量、文件树、书签和上下文用量。每个块点一下就会在回合中立刻打开对应插件的面板，不往对话里留一行字。横幅本身很薄：面板属于 find-model、filetree、session-meter、after 和 transcript-bookmarks，它们被声明为依赖。
+输入框上方的 powerline 横幅，锁定 Catppuccin Mocha。三个块——diff 数量、文件树和书签。每个块点一下就会在回合中立刻打开对应插件的面板，不往对话里留一行字。横幅本身很薄：面板属于 filetree 和 transcript-bookmarks，它们被声明为依赖。模型、effort 和上下文用量不在横幅上显示，由状态栏负责。
 
 作者：[Linxuan](https://github.com/linxuan-sys)。本站原创。
 
@@ -369,7 +368,7 @@ claude plugin install smart-compact@cc-skin-pro
 claude plugin install mod-store@cc-skin-pro
 ```
 
-装完跑 `/reload-plugins`，或者重启 Claude Code。skins 放在第一条，因为 transcript-bookmarks 和 paste-preview 依赖它；cc-band-pro 声明了五个伙伴插件作为依赖，装它会一并装上。
+装完跑 `/reload-plugins`，或者重启 Claude Code。skins 放在第一条，因为 transcript-bookmarks 和 paste-preview 依赖它；cc-band-pro 声明了两个伙伴插件作为依赖，装它会一并装上。
 
 建议 Claude Code 2.1.306 或更新——filetree 需要它，smart-compact 需要 2.1.295，redgreen 需要 2.1.293，skins 需要 2.1.287。
 

@@ -1,56 +1,13 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, SessionContextUsage, Timer } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
-import type { DiffStep, Usage } from '../types'
-import { FRAME_MS, drawPowerline, fitPills } from './bar'
+import type { DiffStep } from '../types'
+import { barPills, drawPowerline } from './bar'
 import type { BarPress } from './bar'
 import { DIFF_PANE, diffLines, drawDiff, isEditTool } from './diff'
 
-const NO_USAGE: Usage = { model: null, contextPercent: null, contextTokens: null }
-
-const frameAtom = atom({ plugin: 'cc-band-pro', key: 'frame' } as const, 0)
-const usageAtom = atom({ plugin: 'cc-band-pro', key: 'usage' } as const, NO_USAGE)
-const effortAtom = atom({ plugin: 'cc-band-pro', key: 'effort' } as const, null as string | null)
 const diffStepsAtom = atom({ plugin: 'cc-band-pro', key: 'diffSteps' } as const, [] as DiffStep[])
 const diffIndexAtom = atom({ plugin: 'cc-band-pro', key: 'diffIndex' } as const, 0)
-
-/** The thinking block's two crab thumbnails, read once per load; undefined when an asset is missing. */
-let crabPngs: { idle: string; typing: string } | null = null
-/** Set once a read came up empty, so a missing asset is not read again every frame. */
-let crabMissing = false
-const readCrab = async ($: EngineInterface): Promise<{ idle: string; typing: string } | undefined> => {
-  if (crabPngs !== null) {
-    return crabPngs
-  }
-  if (crabMissing) {
-    return undefined
-  }
-  const read = (name: string): Promise<string> =>
-    $.fs.read(`${$.plugin.root}/assets/${name}`, { as: 'bytes' }).then(file => file.base64)
-  const [idle, typing] = await Promise.all([read('crab.png').catch(() => ''), read('crab-typing.png').catch(() => '')])
-  if (idle === '' || typing === '') {
-    crabMissing = true
-    return undefined
-  }
-
-  crabPngs = { idle, typing }
-
-  return crabPngs
-}
-
-/**
- * Hosts a terminal's graphics escapes never pass through — tmux, an editor's
- * `:terminal` — sniffed once per session from the environment, so the crab is
- * not drawn into a host that eats it. Everywhere else the engine's alt fallback
- * has the last word.
- */
-let hasGraphics = true
-const sniffGraphics = async ($: EngineInterface): Promise<void> => {
-  const tmux = await $.env.get('TMUX')
-  const nvim = await $.env.get('NVIM')
-  const vimTerminal = await $.env.get('VIM_TERMINAL')
-  hasGraphics = tmux === undefined && nvim === undefined && vimTerminal === undefined
-}
 
 /**
  * What a press on a block runs: another plugin's own slash command, exactly as
@@ -61,20 +18,8 @@ type Pane = { id: string; title: string | ((cwd: string) => string); focus?: boo
 type Target = { command: string; plugin: string; pane?: Pane }
 const TARGETS: Readonly<Record<Exclude<BarPress, 'diff'>, Target>> = {
   // Each of these keeps the state its pane draws from, so opening it by its id
-  // comes up whole without the command: find-model reads its list in at
-  // session.start, filetree keeps its tree following the cwd, session-meter
-  // keeps its reading from session.measure, after its queue in state, and
-  // transcript-bookmarks its list from $.store at session.start.
-  after: {
-    command: 'after',
-    plugin: 'after',
-    pane: { id: 'after', title: 'After', focus: true, closeOnEscape: true },
-  },
-  model: {
-    command: 'find-model',
-    plugin: 'find-model',
-    pane: { id: 'find-model', title: 'Find model', focus: true, closeOnEscape: true },
-  },
+  // comes up whole without the command: filetree keeps its tree following the
+  // cwd, and transcript-bookmarks its list from $.store at session.start.
   tree: {
     command: 'filetree',
     plugin: 'filetree',
@@ -85,93 +30,10 @@ const TARGETS: Readonly<Record<Exclude<BarPress, 'diff'>, Target>> = {
     plugin: 'transcript-bookmarks',
     pane: { id: 'bookmarks', title: 'Bookmarks', focus: true, closeOnEscape: true },
   },
-  usage: { command: 'ctx', plugin: 'session-meter', pane: { id: 'ctx', title: 'Session' } },
 }
 
-/** The friendly names the settings' modelPicker gives the models, read as a session starts. */
-let labels: Record<string, string> = {}
-/** Moves the spinner while a main-thread turn runs. */
-let animation: Timer | undefined
 /** The edits this turn has made so far; they become the diff pane's steps when it ends. */
 let pendingDiffs: DiffStep[] = []
-
-/** The session's model; null when it cannot be read. */
-const readModel = async ($: EngineInterface): Promise<string | null> => {
-  try {
-    return await $.session.model()
-  } catch {
-    return null
-  }
-}
-
-/** The effort `/effort` set, from the config rows; null for none (the model's own default). */
-const readEffort = async ($: EngineInterface): Promise<string | null> => {
-  try {
-    const row = (await $.config.list()).find(one => one.key === 'effort')
-    const value = typeof row?.value === 'string' ? row.value.trim() : ''
-
-    return value === '' || value === 'auto' ? null : value
-  } catch {
-    return null
-  }
-}
-
-/** The friendly name of each model the settings' modelPicker lists, where it gives one. */
-const readLabels = async ($: EngineInterface): Promise<Record<string, string>> => {
-  try {
-    const picker = (await $.settings.read({ key: 'modelPicker' })) as { options?: unknown } | undefined
-    const rows = Array.isArray(picker?.options) ? (picker.options as Array<{ model?: unknown; label?: unknown } | null>) : []
-    const found: Record<string, string> = {}
-    for (const row of rows) {
-      const model = typeof row?.model === 'string' ? row.model.trim() : ''
-      const label = typeof row?.label === 'string' ? row.label.trim() : ''
-      if (model !== '' && label !== '') {
-        found[model] = label
-      }
-    }
-
-    return found
-  } catch {
-    return {}
-  }
-}
-
-/**
- * How full the context is, measured as skins and `/context` measure it: against
- * the window auto-compaction runs at where that is smaller than the model's own,
- * so the yellow and red come before the engine compacts on its own. The plain
- * `percent` is against the model's whole window, which reads lower.
- */
-const contextPercent = (context: SessionContextUsage): number | null => {
-  const compactsAt = context.breakdown?.rawMaxTokens
-  if (context.tokens !== undefined && compactsAt !== undefined && compactsAt > 0 && compactsAt < context.window) {
-    return Math.min(100, Math.round((context.tokens / compactsAt) * 100))
-  }
-
-  return context.percent ?? null
-}
-
-/** How full the context is; absent when the session cannot say. `session.measure`'s own context carries no breakdown. */
-const readUsage = async ($: EngineInterface): Promise<Omit<Usage, 'model'> | undefined> => {
-  const maybe = await $.session.usage({ breakdown: 'summary' }).catch(() => undefined)
-  if (maybe === undefined) {
-    return undefined
-  }
-
-  return { contextPercent: contextPercent(maybe.context), contextTokens: maybe.context.tokens ?? null }
-}
-
-/** Reads in what the bar shows: the model's names first, so the redraw the writes cause has them. */
-const setUp = async ($: EngineInterface) => {
-  labels = await readLabels($)
-  const model = await readModel($)
-  const usage = await readUsage($)
-  await update($, usageAtom, current => ({ ...current, ...usage, model: model ?? current.model }))
-  const effort = await readEffort($)
-  if (effort !== null) {
-    await update($, effortAtom, () => effort)
-  }
-}
 
 /**
  * Runs another plugin's command on a timer, in a dispatch of its own: work a
@@ -287,18 +149,9 @@ const stepsFor = async ($: EngineInterface, e: Record<string, unknown>): Promise
 }
 
 export const register: Register = on => {
-  on('session.start', async ($, e, next) => {
-    await sniffGraphics($)
-    await setUp($).catch(() => undefined)
-
-    return next(e)
-  })
-
-  // A /clear or a resume ends this session: the host empties every plugin's $.state with it (these atoms included,
+  // A /clear or a resume ends this session: the host empties every plugin's $.state with it (the atoms included,
   // back to their defaults), so only the turn's edits, held in this module, are dropped here.
   on('session.end', async ($, e, next) => {
-    animation?.cancel()
-    animation = undefined
     if (e.reason === 'resume' || e.reason === 'clear') {
       pendingDiffs = []
     }
@@ -306,36 +159,13 @@ export const register: Register = on => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  // The spinner turns from the moment a main-thread turn starts; a subagent's turn carries its agentId.
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
       pendingDiffs = []
-      animation?.cancel()
-      animation = $.clock.every(FRAME_MS, () => void update($, frameAtom, frame => frame + 1))
     }
 
     return next(e)
   }).catch(($, e, next) => next(e))
-
-  // Each request says which model and effort it ran on: the model block follows them.
-  on('turn.step', async function* ($, e, next) {
-    try {
-      if (e.agentId === undefined) {
-        const effort = typeof e.effort === 'string' ? e.effort : undefined
-        if (effort !== undefined && (await read($, effortAtom)) !== effort) {
-          await update($, effortAtom, () => effort)
-        }
-        const model = e.model
-        if ((await read($, usageAtom)).model !== model) {
-          await update($, usageAtom, usage => ({ ...usage, model }))
-        }
-      }
-    } catch {
-      // The bar shows them from the next request.
-    }
-
-    return yield* next(e)
-  })
 
   // An edit is diffed before it runs (a Write against the file as it stands) and kept once it went through.
   on('tool.call', async ($, e, next) => {
@@ -367,36 +197,8 @@ export const register: Register = on => {
       await update($, diffStepsAtom, () => edits)
       await update($, diffIndexAtom, () => 0)
     }
-    animation?.cancel()
-    animation = undefined
-    await update($, frameAtom, () => 0)
 
     return next(e)
-  }).catch(($, e, next) => next(e))
-
-  on('session.measure', async ($, e, next) => {
-    const model = await readModel($)
-    const usage = await readUsage($)
-    await update($, usageAtom, current => ({ ...current, ...usage, model: model ?? current.model }))
-
-    return next(e)
-  }).catch(($, e, next) => next(e))
-
-  // A /model or a pick in /find-model shows at once, not with the next request.
-  on('config.set', { key: 'model' }, async ($, e, next) => {
-    const result = await next(e)
-    const model = await readModel($)
-    await update($, usageAtom, current => ({ ...current, model: model ?? current.model }))
-
-    return result
-  }).catch(($, e, next) => next(e))
-
-  on('config.set', { key: 'effort' }, async ($, e, next) => {
-    const result = await next(e)
-    const effort = await readEffort($)
-    await update($, effortAtom, () => effort)
-
-    return result
   }).catch(($, e, next) => next(e))
 
   // The band: the bar on top of whatever the plugins beneath draw, so the skins band and the rest stay.
@@ -406,22 +208,8 @@ export const register: Register = on => {
       return below
     }
     const elements = $.ui.resolve(e)
-    // The thinking block draws the crab where the surface offers pictures and
-    // no escape-eating host wraps the terminal; elsewhere it keeps the glyph.
-    const crab = hasGraphics && 'Image' in elements ? await readCrab($) : undefined
-    const pills = fitPills(
-      {
-        usage: await read($, usageAtom),
-        effort: await read($, effortAtom),
-        labels,
-        diffCount: (await read($, diffStepsAtom)).length,
-        isWorking: e.props.isWorking,
-        frame: await read($, frameAtom),
-      },
-      e.props.bodyColumns,
-      crab,
-    )
     const { Box } = elements
+    const pills = barPills((await read($, diffStepsAtom)).length)
 
     return (
       <Box flexDirection="column">
