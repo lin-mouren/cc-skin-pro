@@ -2,7 +2,7 @@
 
 cc-skin-pro's powerline bar, and nothing else, locked to Catppuccin Mocha. No
 themes, no picker, no settings: one band above the prompt. It holds the mods'
-modules as blocks, left to right, each a click away from the pane it opens.
+modules as blocks, left to right, each a click away from the pane its mod opens.
 
 ```
   diff 3   tree    marks   Running the parser tests   git   inv   plan
@@ -11,13 +11,13 @@ modules as blocks, left to right, each a click away from the pane it opens.
 | Block | Shows | A click |
 | --- | --- | --- |
 | Diff | How many Edit, MultiEdit and Write calls the last turn made | Opens cc-band-pro's own Diff pane: step through each edit, `p`/`n`, Esc closes |
-| Tree | `tree` | Runs `/filetree` |
-| Marks | A bookmark icon | Opens the Bookmarks pane (the `transcript-bookmarks` plugin) |
-| Task | task-rail's segment: its one-line status, cut to 28 cells | Opens the Rail pane (task-rail); runs `/rail pane` |
-| Studio | product-studio's segment: its one-line summary, cut to 36 cells | Opens the Studio pane (product-studio); runs `/studio` |
-| Git | git-board's segment, e.g. `⎇ main · 3 reflog`, cut to 28 cells; `git` while it publishes none | Opens the Git pane (git-board); runs `/gb` |
-| Inventory | inventory-pane's segment, e.g. `mem 4 · skill 12 · mod 7`, cut to 28 cells; `inv` while it publishes none | Opens the Inventory pane (inventory-pane); runs `/inv` |
-| Plan | plan-board's segment, e.g. `P0 open 5 · overdue 0`, cut to 28 cells; `plan` while it publishes none | Opens the Plan pane (plan-board); runs `/pb` |
+| Tree | `tree` | Runs `/filetree open`, which opens the file tree (filetree) |
+| Marks | A bookmark icon | Runs `/bookmarks`, which opens the Bookmarks pane (transcript-bookmarks) |
+| Task | task-rail's segment: its one-line status, cut to 28 cells | Runs `/rail pane`, which opens the Rail pane (task-rail) |
+| Studio | product-studio's segment: its one-line summary, cut to 36 cells | Runs `/studio`, which opens the Studio pane (product-studio) |
+| Git | git-board's segment, e.g. `⎇ main · 3 reflog`, cut to 28 cells; `git` while it publishes none | Runs `/gb`, which opens the Git pane (git-board) |
+| Inventory | inventory-pane's segment, e.g. `mem 4 · skill 12 · mod 7`, cut to 28 cells; `inv` while it publishes none | Runs `/inv`, which opens the Inventory pane (inventory-pane) |
+| Plan | plan-board's segment, e.g. `P0 open 5 · overdue 0`, cut to 28 cells; `plan` while it publishes none | Runs `/pb`, which opens the Plan pane (plan-board) |
 
 A Task or Studio segment with no letter or digit (a lone glyph such as `○`) is
 left out, as an empty one is: a block of its own with no words would read as a
@@ -36,8 +36,8 @@ shows them.
 
 - **A Nerd Font** in the terminal, for the powerline caps and the icons.
 - **filetree** and **transcript-bookmarks**, for the tree and marks blocks.
-  cc-band-pro only opens their panes, so each stays in, and is kept up in, its
-  own plugin. A block whose plugin is off says so in a toast.
+  cc-band-pro only runs their commands, so each stays in, and is kept up in,
+  its own plugin. A block whose plugin is off says so in a toast.
 - **task-rail**, **product-studio**, **git-board**, **inventory-pane** and
   **plan-board**, for the other five blocks. None of them is a dependency.
   Task and Studio show the text their mod publishes, and leave their block out
@@ -63,22 +63,19 @@ follows the mod's text and drops out when the mod is absent.
 
 ## Clicks while Claude works
 
-Every pane opens at once, mid-turn or not, and no press leaves a line in the
-conversation. The Diff pane is cc-band-pro's own. The other panes are opened by
-their ids, each drawn by its own mod's render hook. That works for filetree, which
-keeps its tree following the cwd, and for transcript-bookmarks, which keeps its
-list from `$.store` at session start. When a pane's render hook does not answer,
-or the layout cannot hold it (filetree wants the fullscreen layout at 110 columns
-or more), the block falls back to the plugin's command, and a command run from a
-plugin waits for the turn to end, so that press is queued and a toast says so.
-Task falls back to `/rail pane`, because its bare command toggles the folding of
-tool calls.
+A press on a mod's block runs that mod's own command, as if typed, and the mod
+opens its own pane. cc-band-pro draws only the Diff pane. Task runs `/rail pane`,
+because a bare `/rail` toggles the folding of tool calls. Tree runs `/filetree open`,
+because a bare `/filetree` closes the tree when it is already shown.
 
-Typing `/filetree` yourself still opens it mid-turn, as that plugin allows.
+While Claude is working, a press whose command waits for the turn is queued until
+the turn ends, and a toast says so. Tree and Marks are the exception: their
+commands are immediate, so they run at once mid-turn.
 
 ## Files
 
 - `hooks/register.tsx`: the hooks: band, diff recording, clicks.
+- `hooks/targets.ts`: the command each block runs, and the one pane it draws.
 - `hooks/bar.tsx`: the colors, icons, blocks and the powerline drawing.
 - `hooks/diff.tsx`: the line diff and the Diff pane.
 - `types/index.d.ts`: the state contract.

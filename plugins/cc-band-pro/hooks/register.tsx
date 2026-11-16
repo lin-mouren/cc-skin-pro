@@ -5,60 +5,11 @@ import type { DiffStep } from '../types'
 import { barPills, drawPowerline } from './bar'
 import type { BarPress } from './bar'
 import { DIFF_PANE, diffLines, drawDiff, isEditTool } from './diff'
+import { paneOf, targetOf } from './targets'
+import type { Pane, Target } from './targets'
 
 const diffStepsAtom = atom({ plugin: 'cc-band-pro', key: 'diffSteps' } as const, [] as DiffStep[])
 const diffIndexAtom = atom({ plugin: 'cc-band-pro', key: 'diffIndex' } as const, 0)
-
-/**
- * What a press on a block runs: another plugin's own slash command, exactly as
- * if it were typed, so each pane is kept in its own plugin. The diff block is
- * the one that opens this plugin's own pane.
- */
-type Pane = { id: string; title: string | ((cwd: string) => string); focus?: boolean; closeOnEscape?: boolean }
-type Target = { command: string; args?: string; plugin: string; pane?: Pane }
-const TARGETS: Readonly<Record<Exclude<BarPress, 'diff'>, Target>> = {
-  // Each of these keeps the state its pane draws from, so opening it by its id
-  // comes up whole without the command: filetree keeps its tree following the
-  // cwd, and transcript-bookmarks its list from $.store at session.start.
-  tree: {
-    command: 'filetree',
-    plugin: 'filetree',
-    pane: { id: 'filetree', title: cwd => `Files: ${cwd.split('/').pop() || cwd}`, focus: true },
-  },
-  mark: {
-    command: 'bookmarks',
-    plugin: 'transcript-bookmarks',
-    pane: { id: 'bookmarks', title: 'Bookmarks', focus: true, closeOnEscape: true },
-  },
-  // The mods' modules. Each pane is opened by its id and has its own render hook. Their commands are the fallback;
-  // bare /rail toggles the folding of tool calls, so the rail's fallback says 'pane' to open its side panel.
-  rail: {
-    command: 'rail',
-    args: 'pane',
-    plugin: 'task-rail',
-    pane: { id: 'task-rail', title: 'Rail', closeOnEscape: true },
-  },
-  studio: {
-    command: 'studio',
-    plugin: 'product-studio',
-    pane: { id: 'product-studio', title: 'Studio', focus: true, closeOnEscape: true },
-  },
-  git: {
-    command: 'gb',
-    plugin: 'git-board',
-    pane: { id: 'git-board', title: 'Git', focus: true, closeOnEscape: true },
-  },
-  inv: {
-    command: 'inv',
-    plugin: 'inventory-pane',
-    pane: { id: 'inventory-pane', title: 'Inventory', focus: true, closeOnEscape: true },
-  },
-  plan: {
-    command: 'pb',
-    plugin: 'plan-board',
-    pane: { id: 'plan-board', title: 'Plan', focus: true, closeOnEscape: true },
-  },
-}
 
 /** The edits this turn has made so far; they become the diff pane's steps when it ends. */
 let pendingDiffs: DiffStep[] = []
@@ -78,50 +29,35 @@ const runCommand = ($: EngineInterface, target: Target) => {
 }
 
 /** Opens the diff pane on the last turn's edits, at the first step; a surface that cannot seat it says so in a toast. */
-const openDiff = async ($: EngineInterface): Promise<void> => {
+const openDiff = async ($: EngineInterface, pane: Pane): Promise<void> => {
   void update($, diffIndexAtom, () => 0)
-  const opened = await $.ui.open({ id: DIFF_PANE, title: 'Diff', focus: true, closeOnEscape: true })
+  const opened = await $.ui.open(pane)
   if (!opened.isPlaced) {
     $.ui.toast(`Diff pane is waiting: ${opened.reason}`)
   }
 }
 
-/** Opens another plugin's pane by its id, mid-turn, when its own render hook answers it. */
-const openPaneNow = async ($: EngineInterface, target: Target): Promise<boolean> => {
-  const pane = target.pane
-  if (pane === undefined) {
-    return false
-  }
-  const { id, focus, closeOnEscape } = pane
-  const title = typeof pane.title === 'string' ? pane.title : pane.title(await $.session.cwd().catch(() => ''))
-  const opened = await $.ui.open({ id, title, focus, closeOnEscape }).catch(() => undefined)
-
-  return opened?.isPlaced === true
-}
-
 /**
- * What a press on the bar does: the diff opens here at once, the rest run their
- * own plugins' commands. A pane that draws from state its plugin already keeps
- * opens straight away and leaves no line in the conversation, mid-turn or not;
- * the other commands wait for the turn to end, as one run from a hook does, so a
- * press while Claude works says it is queued.
+ * What a press on the bar does: the diff opens here at once; every other press
+ * runs its mod's command, which opens the mod's own pane. A command waits for the
+ * turn to end, as one run from a hook does, so a press while Claude works says
+ * it is queued, unless the command is immediate and runs mid-turn.
  */
 const onBarPress = ($: EngineInterface, press: BarPress, isWorking: boolean) => {
-  if (press === 'diff') {
-    void openDiff($).catch(() => undefined)
+  const pane = paneOf(press)
+  if (pane !== undefined) {
+    void openDiff($, pane).catch(() => undefined)
 
     return
   }
-  const target = TARGETS[press]
-  void openPaneNow($, target).then(now => {
-    if (now) {
-      return
-    }
-    if (isWorking) {
-      $.ui.toast(`/${target.command} queued: it opens when this turn ends`)
-    }
-    runCommand($, target)
-  })
+  const target = targetOf(press)
+  if (target === undefined) {
+    return
+  }
+  if (isWorking && target.immediate !== true) {
+    $.ui.toast(`/${target.command} queued: it opens when this turn ends`)
+  }
+  runCommand($, target)
 }
 
 /** A path under the session's folder as relative to it; any other as it is. */
